@@ -2,6 +2,7 @@ package course.concurrency.m2_async.cf.min_price;
 
 import course.concurrency.m2_async.cf.report.Others;
 
+import java.sql.SQLOutput;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -23,8 +24,58 @@ public class PriceAggregator {
 
     public double getMinPrice(long itemId) {
         // здесь будет ваш код
+//        Double result = Double.NaN;
         List<Double> prices = new ArrayList<>();
 
+        try {
+            return CompletableFuture.supplyAsync(() -> {
+                        for (long shopId : shopIds) {
+                            try {
+                                CompletableFuture.supplyAsync(() -> priceRetriever.getPrice(itemId, shopId), executor)
+                                        .handle((price, ex) -> {
+                                            if (ex != null) {
+                                                System.out.println("Thread: " + Thread.currentThread().getName() + " shopId = " + shopId + "return Double.NaN");
+                                                return Double.NaN;
+                                            } else {
+                                                System.out.println("Thread: " + Thread.currentThread().getName() + " shopId = " + shopId + "price = " + price);
+                                                prices.add(price);
+                                                return price;
+                                            }
+                                        }).get(3, SECONDS);
+                            } catch (InterruptedException | ExecutionException | TimeoutException ex) {
+                                throw new RuntimeException(ex);
+                            }
+                        }
+                        System.out.println("prices.size = " + prices.size());
+                        return prices;
+                    })
+                    .handle((price, ex) -> {
+                        if (ex != null) {
+                            System.out.println("Thread: " + Thread.currentThread().getName() + " returning Double.NaN");
+//                                return Double.NaN;
+                        } else {
+                            System.out.println("Thread: " + Thread.currentThread().getName() + "prices.size  = " + prices.size());
+//                                return prices;
+                        }
+                        return prices;
+                    }).thenApply((prc) -> {
+                        if (prices.size() == 0) {
+                            System.out.println("Thread: " + Thread.currentThread().getName() + " return Double.NaN;");
+                            return Double.NaN;
+                        } else {
+                            Double res = prices.stream().reduce(Double::min).get();
+                            System.out.println("res = " + res);
+                            return res;
+                        }
+                    }).get(3, SECONDS);
+        } catch (InterruptedException | TimeoutException | ExecutionException e) {
+//            throw new RuntimeException(e);
+            System.out.println("Exception in 73");
+            return Double.NaN;
+        }
+    }
+
+    /*
         try {
             return CompletableFuture.supplyAsync(() -> {
                 for (long shopId : shopIds) {
@@ -68,4 +119,6 @@ public class PriceAggregator {
             throw new RuntimeException(e);
         }
     }
+
+     */
 }
